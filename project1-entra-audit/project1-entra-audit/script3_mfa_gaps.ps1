@@ -51,4 +51,72 @@ Write-Host "Estimated time: $([math]::Round($total * 0.5 / 60, 1)) minutes" -For
 foreach ($user in $members) {
     $i++
     if ($i % 20 -eq 0) {
-        Write-Host "Progress: $i of $total ($([math]::Round($i/$to
+        Write-Host "Progress: $i of $total ($([math]::Round($i/$total*100))%)" -ForegroundColor Cyan
+    }
+
+    # Rate limit protection — pause every 10 calls
+    if ($i % 10 -eq 0) { Start-Sleep -Milliseconds 500 }
+
+    # Retry loop — handles 429 Too Many Requests
+    $maxRetries      = 3
+    $attempt         = 0
+    $methodsResponse = $null
+
+    while ($attempt -lt $maxRetries -and $null -eq $methodsResponse) {
+        $attempt++
+        try {
+            $methodsResponse = Invoke-RestMethod `
+                -Uri "https://graph.microsoft.com/v1.0/users/$($user.id)/authentication/methods" `
+                -Headers $headers -ErrorAction Stop
+        } catch {
+            $errMsg = $_.ToString()
+            if ($errMsg -match "429|Too Many") {
+                Write-Host "Rate limited — waiting 10 seconds..." -ForegroundColor Yellow
+                Start-Sleep -Seconds 10
+                $methodsResponse = $null
+            } elseif ($errMsg -match "403|accessDenied") {
+                break
+            } else {
+                break
+            }
+        }
+    }
+
+    if ($null -eq $methodsResponse) { continue }
+
+    $methods     = $methodsResponse.value
+    $nonPassword = $methods | Where-Object {
+        $_.'@odata.type' -ne "#microsoft.graph.passwordAuthenticationMethod"
+    }
+
+    $methodNames = ($methods | ForEach-Object {
+        $t = $_.'@odata.type'
+        if ($methodLabels.ContainsKey($t)) { $methodLabels[$t] } else { $t }
+    }) -join ", "
+
+    $results += [PSCustomObject]@{
+        DisplayName       = $user.displayName
+        UPN               = $user.userPrincipalName
+        MFARegistered     = if ($nonPassword.Count -gt 0) { "YES" } else { "NO" }
+        MethodsRegistered = $methodNames
+        MFAMethodCount    = $nonPassword.Count
+    }
+
+    # Checkpoint save every 50 users — protects against session timeout
+    if ($i % 50 -eq 0) {
+        $results | Export-Csv -Path "C:\IAM-Audit\MFAGaps_Audit.csv" -NoTypeInformation
+        Write-Host "Checkpoint saved at $i users" -ForegroundColor Yellow
+    }
+}
+
+$noMFA  = $results | Where-Object { $_.MFARegistered -eq "NO" }
+$hasMFA = $results | Where-Object { $_.MFARegistered -eq "YES" }
+
+Write-Host ""
+Write-Host "Users with NO MFA:     $($noMFA.Count)" -ForegroundColor Red
+Write-Host "Users with MFA:        $($hasMFA.Count)" -ForegroundColor Green
+Write-Host "Total members scanned: $($results.Count)"
+
+$results | Sort-Object MFARegistered, DisplayName | Format-Table -AutoSize
+$results | Export-Csv -Path "C:\IAM-Audit\MFAGaps_Audit.csv" -NoTypeInformation
+Write-Host "Done. Exported: C:\IAM-Audit\MFAGaps_Audit.csv" -ForegroundColor Green
