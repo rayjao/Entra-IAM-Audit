@@ -12,7 +12,7 @@ This project documents a real-world identity security audit executed against a l
 
 The audit identified **6 critical and 8 high severity findings** — including a vendor tool with accumulated permissions sufficient to silently take over the entire tenant, 42 stale licensed accounts, 3 expired app secrets including a broken ransomware protection tool, and 13 of 24 app registrations with no owner assigned.
 
-All findings were delivered as an 10-page executive report mapped to NIST SP 800-53, CIS Controls v8, and ISO/IEC 27001, with a 16-item prioritized remediation roadmap.
+All findings were delivered as an 8-page executive report mapped to NIST SP 800-53, CIS Controls v8, and ISO/IEC 27001, with a 16-item prioritized remediation roadmap.
 
 ---
 
@@ -51,7 +51,7 @@ All findings were delivered as an 10-page executive report mapped to NIST SP 800
 
 ## Real Findings Summary
 
-Executed against a live 560-user tenant. Anonymized summary:
+Executed against a live 1,143-user tenant. Anonymized summary:
 
 | Finding | Severity | Scripts |
 |---|---|---|
